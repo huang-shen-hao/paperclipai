@@ -17,7 +17,15 @@ export { AgentLifecycleConflict, canConfigureAgentConnection, isAgentAwaitingSet
 export type { HireDecisionTarget } from "./adapters/approvals.js";
 export type { LifecycleDriver, LifecycleAgent, LifecycleFailure } from "./application/ports.js";
 
-const policyStates = ["preparing", "verifying", "ready", "pausing", "paused", "resuming"] as const;
+/**
+ * States the periodic sweep re-drives. `terminating` and `cleaning_up` are
+ * included on purpose: a termination whose cleanup failed (or whose single
+ * post-command attempt was lost) otherwise sat in `terminating` forever — not
+ * sweepable, not resumable, and not deletable, because purge requires a
+ * completed termination.
+ */
+const policyStates = ["preparing", "verifying", "ready", "pausing", "paused", "resuming",
+  "terminating", "cleaning_up"] as const;
 const policyPageSize = 100;
 
 const workers = new WeakMap<Db, ReturnType<typeof createLifecycleWorker>>();
