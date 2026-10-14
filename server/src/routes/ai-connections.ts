@@ -8,6 +8,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   type Db,
   adapterAuthSessions,
+  browserUseSessions,
   heartbeatRuns,
   toolConnections,
   connectionGrants,
@@ -232,6 +233,59 @@ export function aiConnectionRoutes(db: Db, options: Parameters<typeof supportsLo
       ),
     } satisfies AiConnectionList);
   });
+
+  /**
+   * Remove a *revoked* AI connection.
+   *
+   * Revoke is the audited stop: a live or merely unhealthy credential must be
+   * revoked first, so a mistake here cannot silently take away a working
+   * account. Once revoked, the row is dead weight the operator may clear.
+   * Every inbound reference cascades except `browser_use_sessions`, which is
+   * cleared explicitly.
+   */
+  router.delete("/companies/:companyId/ai-connections/:connectionId", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertBoard(req);
+    assertCompanyAccess(req, companyId);
+    if (!(await canManageAiConnections(db, req, companyId))) {
+      throw forbidden("Manage connections permission is required");
+    }
+    const parsedConnectionId = z.string().uuid().safeParse(req.params.connectionId);
+    if (!parsedConnectionId.success) throw unprocessable("Invalid connection ID");
+    const connectionId = parsedConnectionId.data;
+
+    const [connection] = await db.select().from(toolConnections).where(and(
+      eq(toolConnections.companyId, companyId),
+      eq(toolConnections.id, connectionId),
+      eq(toolConnections.connectionPurpose, "ai"),
+    ));
+    if (!connection) throw notFound("Connection not found");
+
+    const grants = await db.select({ status: connectionGrants.status }).from(connectionGrants)
+      .where(and(eq(connectionGrants.companyId, companyId), eq(connectionGrants.connectionId, connectionId)));
+    if (grants.length === 0 || grants.some(grant => grant.status !== "revoked")) {
+      throw forbidden("Revoke this connection before deleting it");
+    }
+
+    await db.transaction(async tx => {
+      await tx.delete(browserUseSessions).where(eq(browserUseSessions.connectionId, connectionId));
+      await tx.delete(toolConnections).where(and(
+        eq(toolConnections.companyId, companyId), eq(toolConnections.id, connectionId),
+      ));
+    });
+
+    await logActivity(db, {
+      companyId,
+      actorType: "user",
+      actorId: getActorInfo(req).actorId,
+      action: "ai_connection.deleted",
+      entityType: "tool_connection",
+      entityId: connectionId,
+      details: { name: connection.name },
+    });
+    res.json({ ok: true });
+  });
+
   router.get(
     "/companies/:companyId/ai-connections/:connectionId/usage",
     async (req, res) => {
