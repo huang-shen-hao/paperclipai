@@ -358,9 +358,11 @@ const support = await getEmbeddedPostgresTestSupport();
 
   it("rolls back configuration and its revision when the requested transition fails", async () => {
     const lifecycle = createAgentLifecycle(db);
+    // A terminated agent cannot be paused, so the whole configuration write
+    // must roll back with the rejected transition.
     const agent = await hire("terminated");
-    await expect(lifecycle.updateAndTransition(agent.id, "resume", { name: "Must not persist" },
-      { recordRevision: { createdByUserId: "board", source: "patch" } })).rejects.toThrow("Cannot resume");
+    await expect(lifecycle.updateAndTransition(agent.id, "pause", { name: "Must not persist" },
+      { recordRevision: { createdByUserId: "board", source: "patch" } })).rejects.toThrow("Cannot pause");
     expect((await current(agent.id)).name).toBe("Agent");
     expect(await db.select().from(agentConfigRevisions).where(eq(agentConfigRevisions.agentId, agent.id))).toEqual([]);
     const active = await hire();
@@ -712,7 +714,11 @@ describe("lifecycle transition rules", () => {
     expect(transition("preparing", "complete")).toBe("verifying");
     expect(transition("terminating", "complete")).toBe("cleaning_up");
     expect(transition("cleaning_up", "complete")).toBe("terminated");
-    expect(() => transition("terminated", "resume")).toThrow();
+    // Restoring a terminated agent is allowed, but only back through
+    // verification — it never returns straight to ready.
+    expect(transition("terminated", "resume")).toBe("preparing");
     expect(transition("terminating", "terminate")).toBe("terminating");
+    expect(() => transition("rejected", "resume")).toThrow();
+    expect(() => transition("cleaning_up", "resume")).toThrow();
   });
 });

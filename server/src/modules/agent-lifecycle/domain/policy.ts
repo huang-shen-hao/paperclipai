@@ -32,6 +32,12 @@ export function transition(state: AgentLifecycleState, command: LifecycleCommand
   } else if (command === "resume") {
     if (state === "ready" || state === "resuming") return state;
     if (state === "paused") return "resuming";
+    // Termination is an operator action on a local row: it revokes the agent's
+    // API keys but deletes nothing, and `resume` was the only way back — which
+    // made terminate a one-way door that forced delete-and-recreate, losing the
+    // agent's identity, instructions and conversation history. Let an operator
+    // restore it; it re-enters verification before it can take work again.
+    if (state === "terminated") return "preparing";
   } else if (command === "complete") {
     switch (state) {
       case "preparing": return "verifying";
