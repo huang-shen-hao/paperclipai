@@ -1,0 +1,20 @@
+server/src/routes/ai-connections.ts
+  s_d81f87704807af::t_c1e781de032440 11
+  s_d81f87704807af::t_79a26ee72b047a 236-288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "85778a6f79aa2e2be292afe6f6c81c7e93c4ee70",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
