@@ -478,6 +478,17 @@ export async function testEnvironment(
         env,
         probeApiKey,
       });
+      // The hello probe budget used to be a hard-coded 45s. On networks where
+      // Codex's own startup work is slow (plugin-catalog fetches to
+      // chatgpt.com, cold ACP handshakes) a healthy relay still blew past it and
+      // the connection could never be adopted. Allow the agent config to raise
+      // or lower the budget, and default to a value that tolerates slow links.
+      const helloProbeTimeoutSec = (() => {
+        const raw = (config as Record<string, unknown>).helloProbeTimeoutSec;
+        const parsed = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
+        if (!Number.isFinite(parsed)) return 120;
+        return Math.min(900, Math.max(10, Math.trunc(parsed)));
+      })();
       try {
         const probe = await runAdapterExecutionTargetProcess(
           runId,
@@ -487,7 +498,7 @@ export async function testEnvironment(
           {
             cwd,
             env: preparedProbe.env,
-            timeoutSec: 45,
+            timeoutSec: helloProbeTimeoutSec,
             graceSec: 5,
             stdin: "Respond with hello.",
             onLog: async () => {},
@@ -513,8 +524,9 @@ export async function testEnvironment(
           checks.push({
             code: "codex_hello_probe_timed_out",
             level: "warn",
-            message: "Codex hello probe timed out.",
-            hint: "Retry the probe. If this persists, verify Codex can run `Respond with hello` from this directory manually.",
+            message: `Codex hello probe timed out after ${helloProbeTimeoutSec}s.`,
+            hint:
+              "Retry the probe, or raise adapterConfig.helloProbeTimeoutSec. If this persists, verify Codex can run `Respond with hello` from this directory manually.",
           });
         } else if ((probe.exitCode ?? 1) === 0) {
           const summary = parsed.summary.trim();
