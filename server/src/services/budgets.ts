@@ -154,7 +154,22 @@ async function resolveScopeRecord(db: Db, scopeType: BudgetScopeType, scopeId: s
 async function mapBudgetReads<T, R>(rows: T[], read: (row: T) => Promise<R>): Promise<R[]> {
   const result: R[] = [];
   for (let start = 0; start < rows.length; start += 4) {
-    result.push(...await Promise.all(rows.slice(start, start + 4).map(read)));
+    const batch = await Promise.all(rows.slice(start, start + 4).map(async (row): Promise<R | null> => {
+      try {
+        return await read(row);
+      } catch (error) {
+        // A policy whose scope row is gone — a deleted agent or project — is
+        // dangling data, not a reason to fail the whole read. This list is also
+        // used by the startup retention sweep, where throwing took the entire
+        // server down instead of just ignoring the orphan.
+        if (error instanceof HttpError && error.status === 404) {
+          logger.warn({ message: error.message }, "skipping budget row with a missing scope record");
+          return null;
+        }
+        throw error;
+      }
+    }));
+    for (const entry of batch) if (entry !== null) result.push(entry);
   }
   return result;
 }

@@ -1,6 +1,6 @@
 import { and, eq, or, sql } from "drizzle-orm";
 import { agents, agentApiKeys, agentRuntimeState, agentTaskSessions, agentWakeupRequests, activityLog,
-  budgetReservations, companyMemberships, costEvents, decisionRetention, environmentLeases,
+  budgetPolicies, budgetReservations, companyMemberships, costEvents, decisionRetention, environmentLeases,
   executionWorkspaceRepositoryAccess, heartbeatRunEvents, heartbeatRuns, issueExecutionDecisions,
   issueRecoveryActions, issues, issueComments, joinRequests, principalPermissionGrants,
   resourceLifecycleEvents, secretAccessEvents, workspaceOperations, type Db } from "@paperclipai/db";
@@ -42,6 +42,12 @@ export async function deleteAgentDependencies(tx: Db, companyId: string, id: str
   await tx.delete(workspaceOperations).where(sql`${workspaceOperations.heartbeatRunId} in ${ownRuns}`);
   await tx.delete(environmentLeases).where(sql`${environmentLeases.heartbeatRunId} in ${ownRuns}`);
   await tx.delete(budgetReservations).where(eq(budgetReservations.agentId, id));
+  // The agent's own budget policy is scoped by (scope_type, scope_id), not by a
+  // foreign key, so nothing else removes it. Left behind, it made the budget
+  // reads — and therefore server startup — fail with "Agent not found".
+  await tx.delete(budgetPolicies).where(and(
+    eq(budgetPolicies.scopeType, "agent"), eq(budgetPolicies.scopeId, id),
+  ));
   await tx.delete(executionWorkspaceRepositoryAccess).where(eq(executionWorkspaceRepositoryAccess.agentId, id));
   await tx.delete(issueRecoveryActions).where(or(
     eq(issueRecoveryActions.ownerAgentId, id),
