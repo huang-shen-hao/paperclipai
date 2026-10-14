@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { agents, authUsers, companies, companyMemberships, createDb, executionWorkspaceRepositoryRoots, executionWorkspaceRepositoryAccess, executionWorkspaceRepositories, executionWorkspaces,
   heartbeatRuns, issueAccessGrants, issues, projects, projectWorkspaces, projectAccessMembers, principalPermissionGrants, EMBEDDED_POSTGRES_TEST_TIMEOUT_MS } from "@paperclipai/db";
 import { assertExecutionWorkspaceRootReadAccess, assertExecutionWorkspaceRootWriteAccess, assertIsolatedWorkspaceSourceReadAccess, retainIsolatedWorkspaceSourceAccess, executionWorkspaceRepositoryService } from "../services/execution-workspace-repositories.js";
@@ -849,5 +849,25 @@ const support = await getEmbeddedPostgresTestSupport();
     await f.request({ kind: "catalog", id: "private-repo" });
     await expect(f.service.prepareForAdmission({ ...f.admission, runId: randomUUID() })).rejects.toThrow(/run identity/);
     expect(acquisition.materialize).not.toHaveBeenCalled();
+  });
+
+  it("prunes a repository-root reader whose run was deleted instead of poisoning later runs", async () => {
+    const f = await fixture();
+    await expect(f.service.prepareForAdmission(f.admission)).resolves.toEqual([]);
+    const readersOf = async (): Promise<Array<{ kind: string; scopeId: string; canonicalCwd: string; rootKey: string }>> =>
+      (await db.select().from(executionWorkspaceRepositoryAccess).where(and(
+        eq(executionWorkspaceRepositoryAccess.companyId, f.companyId),
+        eq(executionWorkspaceRepositoryAccess.kind, "reader"),
+      ))).map(row => ({ kind: row.kind, scopeId: row.scopeId, canonicalCwd: row.canonicalCwd, rootKey: row.rootKey }));
+    const [live] = await readersOf();
+    expect(live?.scopeId).toBe(f.runId);
+    // Deleting a task or terminating an agent leaves its reader row behind with
+    // no run, agent, or issue left to resolve. Before the fix this row made
+    // every later admission in the company throw.
+    await db.insert(executionWorkspaceRepositoryAccess).values({ id: randomUUID(), companyId: f.companyId,
+      canonicalCwd: live.canonicalCwd, rootKey: live.rootKey, kind: "reader", scopeId: randomUUID(),
+      issueId: randomUUID(), agentId: randomUUID(), responsibleUserId: f.userId });
+    await expect(f.service.prepareForAdmission(f.admission)).resolves.toEqual([]);
+    expect((await readersOf()).map(reader => reader.scopeId)).toEqual([f.runId]);
   });
 });

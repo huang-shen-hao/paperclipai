@@ -180,13 +180,32 @@ async function assertRootProjectAccess(db: Db | DbTransaction, actor: Authorizat
   }
 }
 
+/**
+ * Resolve a retained repository-root "reader" entry into an authorization actor.
+ *
+ * Readers point at the run/agent/issue that originally gained access to a repo
+ * root. Those rows are never garbage-collected, so deleting an issue or
+ * terminating an agent (both supported operations) left rows behind whose
+ * identity no longer existed — and `assertExecutionWorkspaceRootSources` then
+ * threw for *every* later run in that company, permanently poisoning it with
+ * "Repository root retains a reader whose identity is no longer available".
+ *
+ * Prune the stale row and skip it instead of failing the whole workspace check:
+ * the access it recorded has no live identity to authorize, so it must not
+ * block unrelated work. Returns null when the reader was dropped.
+ */
 async function retainedRootReader(tx: DbTransaction, companyId: string, reader: Pick<typeof executionWorkspaceRepositoryAccess.$inferSelect, "scopeId" | "issueId" | "agentId" | "responsibleUserId">) {
   const [run] = await tx.select().from(heartbeatRuns).where(and(eq(heartbeatRuns.id, reader.scopeId), eq(heartbeatRuns.companyId, companyId)));
   const [agent] = reader.agentId ? await tx.select({ id: agents.id }).from(agents).where(and(eq(agents.id, reader.agentId), eq(agents.companyId, companyId))) : [];
   const [issue] = reader.issueId ? await tx.select().from(issues).where(and(eq(issues.id, reader.issueId), eq(issues.companyId, companyId))) : [];
   if (!run || !agent || !issue || run.agentId !== reader.agentId || run.responsibleUserId !== reader.responsibleUserId
     || (run.nativeIssueId ?? run.contextSnapshot?.issueId ?? run.contextSnapshot?.taskId ?? run.issueId) !== reader.issueId) {
-    throw forbidden("Repository root retains a reader whose identity is no longer available");
+    await tx.delete(executionWorkspaceRepositoryAccess).where(and(
+      eq(executionWorkspaceRepositoryAccess.companyId, companyId),
+      eq(executionWorkspaceRepositoryAccess.kind, "reader"),
+      eq(executionWorkspaceRepositoryAccess.scopeId, reader.scopeId),
+    ));
+    return null;
   }
   const actor: AuthorizationActor = { type: "agent", source: "agent_jwt", companyId,
     agentId: reader.agentId!, runId: reader.scopeId, onBehalfOfUserId: reader.responsibleUserId === "local-board" ? null : reader.responsibleUserId };
@@ -257,7 +276,9 @@ async function retainGitMetadataOwners(tx: DbTransaction, input: {
   const workspaceIds = new Set([...closure.sourceIds, ...input.workspaceIds]);
   const projectIds = new Set([...closure.sourceProjectIds, ...input.projectIds]);
   for (const reader of closure.overlappingEntries.filter(entry => entry.kind === "reader")) {
-    const { actor } = await retainedRootReader(tx, input.companyId, reader);
+    const retained = await retainedRootReader(tx, input.companyId, reader);
+    if (!retained) continue;
+    const { actor } = retained;
     for (const id of workspaceIds) await assertTaskWorkspaceAccess(tx, actor, input.companyId, id);
     await assertRootProjectAccess(tx, actor, input.companyId, projectIds);
   }
@@ -354,7 +375,9 @@ export async function retainIsolatedWorkspaceSourceAccess(db: Db, input: {
       await assertRootProjectAccess(tx, input.actor, input.companyId, target.sourceProjectIds,
         { sharedProjectIds: target.sharedProjectIds, issueId: input.issueId });
       for (const reader of target.overlappingEntries.filter(entry => entry.kind === "reader")) {
-        const { actor, issue } = await retainedRootReader(tx, input.companyId, reader);
+        const retained = await retainedRootReader(tx, input.companyId, reader);
+        if (!retained) continue;
+        const { actor, issue } = retained;
         await assertRootProjectTrust(tx, { companyId: input.companyId, actor, issueId: issue.id, projectIds: target.sourceProjectIds });
         for (const id of target.sourceIds) await assertTaskWorkspaceAccess(tx, actor, input.companyId, id);
         await assertRootProjectAccess(tx, actor, input.companyId, target.sourceProjectIds);
@@ -543,7 +566,9 @@ export function executionWorkspaceRepositoryService(db: Db) {
       && sourceIds.size === 1 && sourceIds.has(input.sourceWorkspaceId)
       && readers.every(reader => reader.issueId === input.reader!.issueId);
     for (const reader of readers) {
-      const { actor, issue } = await retainedRootReader(tx, input.companyId, reader);
+      const retained = await retainedRootReader(tx, input.companyId, reader);
+      if (!retained) continue;
+      const { actor, issue } = retained;
       await assertRootProjectTrust(tx, { companyId: input.companyId, projectIds: sourceProjectIds, actor, issueId: issue.id,
         sourceWorkspaceId: input.reader?.runId === reader.scopeId ? input.sourceWorkspaceId : undefined });
       await assertRootProjectAccess(tx, actor, input.companyId, sourceProjectIds,
@@ -675,9 +700,11 @@ export function executionWorkspaceRepositoryService(db: Db) {
     }
     await requiresAnonymousAcquisition(tx, { issue, workspace, agentId: input.agentId, runId: input.runId });
     const [run] = await tx.select().from(heartbeatRuns).where(and(eq(heartbeatRuns.id, input.runId), eq(heartbeatRuns.companyId, input.companyId)));
-    const { actor } = await retainedRootReader(tx, input.companyId, {
+    const retained = await retainedRootReader(tx, input.companyId, {
       scopeId: input.runId, issueId: input.issueId, agentId: input.agentId, responsibleUserId: run?.responsibleUserId ?? null,
     });
+    if (!retained) throw forbidden("Task repository publication binding is unavailable");
+    const { actor } = retained;
     return { workspace, actor };
   }
   async function guardForPublication(input: PublicationInput) {
