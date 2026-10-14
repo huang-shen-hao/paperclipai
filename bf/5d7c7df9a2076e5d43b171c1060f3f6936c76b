@@ -1,0 +1,32 @@
+server/src/services/execution-workspace-repositories.ts
+  s_d81f87704807af::t_05f47bad0888f1 60-92,102-105,205-206
+server/src/__tests__/task-workspace-repositories-trust.test.ts
+  s_d81f87704807af::t_6faf9e5893e6ae 873-874,887-888
+  s_d81f87704807af::t_c03f30dbfc85c9 875-886
+ui/src/pages/IssueDetail.tsx
+  s_d81f87704807af::t_07a98750497bc5 8127-8129
+  s_d81f87704807af::t_057127c56cdee5 7559-7561
+  s_d81f87704807af::t_353b49c7c86963 4635-4649
+  s_d81f87704807af::t_fd27387d0a6efa 240-241
+ui/src/pages/IssueDetail.test.tsx
+  s_d81f87704807af::t_5002afbee1cc36 1484-1501,1504-1508,1510-1512
+  s_d81f87704807af::t_810788b82eed8a 1502-1503
+  s_d81f87704807af::t_7fbc8fc95d23c1 58
+  s_d81f87704807af::t_0d0e2a9249dcf5 1509
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "bf5d7c7df9a2076e5d43b171c1060f3f6936c76b",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
