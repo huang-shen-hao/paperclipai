@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { inferOpenAiCompatibleBiller, resolveManagedOpenAiBilling, type AdapterExecutionContext, type AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import { buildCodexAuthInboundProvision } from "./codex-auth-merge-scripts.js";
 import { copyBackCodexAuth } from "./codex-auth-copyback.js";
+import { readLocalCodexDefaults } from "./local-codex-defaults.js";
 import {
   ensureCodexAuthCacheEntryDir,
   isCodexAuthCacheEnabled,
@@ -597,7 +598,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
   );
   const command = asString(config.command, "codex");
-  const model = asString(config.model, "");
+  // Fall back to the host machine's Codex defaults (model / relay endpoint /
+  // credential from ~/.codex/config.toml) when the agent does not name a model.
+  // Without this, a machine whose CLI talks to a relay silently probed Codex's
+  // built-in default model and failed with "503 No available channel for
+  // model ...". See local-codex-defaults.ts.
+  const localCodexDefaults = readLocalCodexDefaults();
+  const model = asString(config.model, "") || localCodexDefaults?.model || "";
 
   const workspaceContext = parseObject(context.paperclipWorkspace);
   const workspaceCwd = asString(workspaceContext.cwd, "");
@@ -743,6 +750,32 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   );
+  // No managed AI connection / custom provider from the control plane? Reuse
+  // whatever the host Codex CLI is already pointed at, instead of forcing
+  // operators to recreate the same relay + key as a Paperclip connection.
+  if (
+    !envConfigStrings.PAPERCLIP_CODEX_PROVIDERS &&
+    localCodexDefaults?.baseUrl &&
+    localCodexDefaults.bearerToken
+  ) {
+    const providerId = localCodexDefaults.providerId || "local-codex-config";
+    const wireApi = localCodexDefaults.wireApi || "responses";
+    envConfigStrings.PAPERCLIP_CODEX_PROVIDERS = JSON.stringify({
+      providers: {
+        [providerId]: {
+          name: "Local Codex config",
+          base_url: localCodexDefaults.baseUrl,
+          experimental_bearer_token: localCodexDefaults.bearerToken,
+          wire_api: wireApi,
+        },
+      },
+      model_provider: providerId,
+    });
+    await onLog(
+      "stdout",
+      `[paperclip] Reusing host Codex provider "${providerId}" (${localCodexDefaults.baseUrl}) from ${localCodexDefaults.configPath}.\n`,
+    );
+  }
   const preparedRuntimeConfig = await prepareCodexRuntimeConfig({
     env: envConfigStrings,
     codexHome: configuredCodexHome ? null : effectiveCodexHome,
