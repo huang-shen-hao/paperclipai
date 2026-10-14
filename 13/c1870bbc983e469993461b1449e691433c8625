@@ -1,0 +1,25 @@
+server/src/modules/agent-lifecycle/adapters/records.ts
+  s_d81f87704807af::t_36052383d94e06 7-33,44-46,50
+packages/adapters/codex-local/src/server/test.ts
+  s_d81f87704807af::t_a71fe4ff61d0f0 91-96
+  s_d81f87704807af::t_d3ec0b007b5701 233-243,248-250,255,263
+  s_d81f87704807af::t_730191a5715ae0 490-505,510,522
+  s_d81f87704807af::t_92096ee17c84a4 244-247
+  s_d81f87704807af::t_f7184a4de131f4 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "13c1870bbc983e469993461b1449e691433c8625",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
