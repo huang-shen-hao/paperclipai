@@ -162,6 +162,37 @@ describe("hermes-local adapter onSpawn forwarding", () => {
     expect(args).not.toContain("-Q");
   });
 
+  /**
+   * Quiet mode prints nothing until the turn ends, and a Hermes turn can run
+   * for minutes — without a heartbeat the task transcript looks stalled.
+   */
+  it("reports progress while a quiet turn is running", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(serverUtils.runChildProcess).mockImplementationOnce(async () => {
+        await vi.advanceTimersByTimeAsync(65_000);
+        return {
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+          stdout: "ok\n",
+          stderr: "",
+          pid: null,
+          startedAt: null,
+        };
+      });
+
+      const { ctx } = makeCtx();
+      await execute(ctx as any);
+
+      const logged = (ctx.onLog as unknown as { mock: { calls: unknown[][] } }).mock.calls
+        .map((call) => String(call[1]));
+      expect(logged.some((line) => /\[hermes] Working… \d+s elapsed/.test(line))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("runChildProcess opts type includes onSpawn", () => {
     // Type-level assertion: if onSpawn were removed from the type,
     // this file would fail to compile. The runtime test above catches

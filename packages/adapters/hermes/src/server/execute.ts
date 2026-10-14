@@ -89,6 +89,9 @@ export function resolveHermesCommand(config: Record<string, unknown>): string {
 // Wake-up prompt builder
 // ---------------------------------------------------------------------------
 
+/** How often a running turn reports that it is still alive (quiet mode only). */
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
 const HERMES_RUNTIME_IDENTITY_TEMPLATE = [
   'You are "{{agent.name}}", an AI agent employee in a Paperclip-managed company.',
   "",
@@ -589,14 +592,32 @@ export async function execute(
     return ctx.onLog(stream, chunk);
   };
 
-  const result = await runChildProcess(ctx.runId, hermesCmd, args, {
-    cwd,
-    env,
-    timeoutSec,
-    graceSec,
-    onLog: wrappedOnLog,
-    onSpawn: ctx.onSpawn,
-  });
+  // Quiet mode prints nothing until the turn ends, and a Hermes turn can run
+  // for minutes. Without a signal the task transcript just says "working" with
+  // no output and looks stalled, so emit a coarse heartbeat while the child
+  // runs. Operators who opt out of quiet mode already get live progress.
+  const startedAtMs = Date.now();
+  const heartbeat = useQuiet
+    ? setInterval(() => {
+      const elapsedSec = Math.round((Date.now() - startedAtMs) / 1000);
+      void ctx.onLog("stdout", `[hermes] Working… ${elapsedSec}s elapsed\n`).catch(() => undefined);
+    }, HEARTBEAT_INTERVAL_MS)
+    : null;
+  if (heartbeat && typeof heartbeat.unref === "function") heartbeat.unref();
+
+  let result;
+  try {
+    result = await runChildProcess(ctx.runId, hermesCmd, args, {
+      cwd,
+      env,
+      timeoutSec,
+      graceSec,
+      onLog: wrappedOnLog,
+      onSpawn: ctx.onSpawn,
+    });
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+  }
 
   // ── Parse output ───────────────────────────────────────────────────────
   const parsed = parseHermesOutput(result.stdout || "", result.stderr || "");
