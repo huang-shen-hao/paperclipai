@@ -6,7 +6,12 @@ import { readBuiltInAgentMarker } from "../../../lib/built-in-agent-metadata.js"
 import { assertAgentPurgeAllowed } from "../domain/policy.js";
 import type { LifecycleEffects } from "./effects.js";
 
-export async function purgeAgent(db: Db, effects: LifecycleEffects, id: string) {
+export async function purgeAgent(
+  db: Db,
+  effects: LifecycleEffects,
+  id: string,
+  options: { allowIncompleteTermination?: boolean } = {},
+) {
   const { getById, normalizeAgentRow } = agentRecordQueries(db);
   const existing = await getById(id);
   if (!existing) return null;
@@ -17,10 +22,13 @@ export async function purgeAgent(db: Db, effects: LifecycleEffects, id: string) 
     if (marker) throw conflict("Built-in agents cannot be deleted; pause them instead", {
       code: "built_in_agent_undeletable", key: marker.key, featureKeys: marker.featureKeys,
     });
-    assertAgentPurgeAllowed(agent);
+    assertAgentPurgeAllowed(agent, options);
     await effects.deleteDependencies(tx, agent.companyId, id);
+    const purgeableStates: Array<"terminated" | "rejected" | "terminating" | "cleaning_up"> = options.allowIncompleteTermination
+      ? ["terminated", "rejected", "terminating", "cleaning_up"]
+      : ["terminated", "rejected"];
     const [deleted] = await tx.delete(agents).where(and(
-      eq(agents.id, id), inArray(agents.lifecycleState, ["terminated", "rejected"]),
+      eq(agents.id, id), inArray(agents.lifecycleState, purgeableStates),
     )).returning();
     return deleted ? normalizeAgentRow(deleted) : null;
   });

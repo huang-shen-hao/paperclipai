@@ -62,8 +62,18 @@ export function isLifecycleWorkPending(state: AgentLifecycleState): boolean {
   return ["preparing", "verifying", "pausing", "resuming", "terminating", "cleaning_up"].includes(state);
 }
 
-export function assertAgentPurgeAllowed(agent: { lifecycleState: string }) {
-  if (!["terminated", "rejected"].includes(agent.lifecycleState)) {
+export function assertAgentPurgeAllowed(
+  agent: { lifecycleState: string },
+  options: { allowIncompleteTermination?: boolean } = {},
+) {
+  const complete = ["terminated", "rejected"].includes(agent.lifecycleState);
+  // Termination normally has to finish before the row goes: its cleanup is what
+  // stops the agent's invocations. `allowIncompleteTermination` is the explicit
+  // operator escape hatch for a *wedged* termination — the driver waits for
+  // every invocation to stop and keeps returning `pending`, which otherwise
+  // leaves a row that cannot be resumed, swept, or deleted.
+  const inFlight = ["terminating", "cleaning_up"].includes(agent.lifecycleState);
+  if (!complete && !(inFlight && options.allowIncompleteTermination)) {
     throw new AgentLifecycleConflict("Complete termination before deleting the agent");
   }
 }

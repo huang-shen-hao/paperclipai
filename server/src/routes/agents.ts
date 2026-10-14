@@ -5589,7 +5589,10 @@ export function agentRoutes(
     if (!(await getAccessibleAgent(req, res, id))) {
       return;
     }
-    const agent = await svc.remove(id);
+    // `force=true` is the operator escape hatch for a termination that never
+    // finished cleaning up. Without it a wedged agent cannot be removed at all.
+    const force = req.query.force === "true" || (req.body as { force?: unknown } | undefined)?.force === true;
+    const agent = await svc.remove(id, { allowIncompleteTermination: force });
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
       return;

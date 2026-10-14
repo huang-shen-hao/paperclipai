@@ -278,7 +278,8 @@ export function agentService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
       return { agent: null, ambiguous: false } as const;
     },
     update: updateAgent,
-    remove: (id: string) => createAgentLifecycle(db, budgetHooks).purgeAgent(id),
+    remove: (id: string, options?: { allowIncompleteTermination?: boolean }) =>
+      createAgentLifecycle(db, budgetHooks).purgeAgent(id, options),
     clearError: (id: string) => createAgentLifecycle(db, budgetHooks).clearError(id),
   };
 }

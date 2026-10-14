@@ -106,7 +106,7 @@ export function createAgentLifecycle(db: Db, effects: LifecycleEffects) {
     terminateAgent: (id: string) => change(id, "terminate"),
     retry: (id: string) => change(id, "retry"),
     clearError: records.clearError,
-    purgeAgent: (id: string) => purgeAgent(db, effects, id),
+    purgeAgent: (id: string, options?: { allowIncompleteTermination?: boolean }) => purgeAgent(db, effects, id, options),
   };
 }
 
