@@ -604,6 +604,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // built-in default model and failed with "503 No available channel for
   // model ...". See local-codex-defaults.ts.
   const localCodexDefaults = readLocalCodexDefaults();
+  // Local-first: when the machine's Codex config is authoritative (operator
+  // opted in per agent or via PAPERCLIP_CODEX_LOCAL_FIRST=1), the host provider
+  // wins over a Paperclip-managed AI connection. Paperclip must never force a
+  // vendor default on a machine whose CLI is wired to a relay.
+  const codexLocalFirst =
+    (config as Record<string, unknown>).codexLocalFirst === true ||
+    (process.env.PAPERCLIP_CODEX_LOCAL_FIRST ?? "").trim() === "1";
   const model = asString(config.model, "") || localCodexDefaults?.model || "";
 
   const workspaceContext = parseObject(context.paperclipWorkspace);
@@ -754,12 +761,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // whatever the host Codex CLI is already pointed at, instead of forcing
   // operators to recreate the same relay + key as a Paperclip connection.
   if (
-    !envConfigStrings.PAPERCLIP_CODEX_PROVIDERS &&
+    (codexLocalFirst || !envConfigStrings.PAPERCLIP_CODEX_PROVIDERS) &&
     localCodexDefaults?.baseUrl &&
     localCodexDefaults.bearerToken
   ) {
     const providerId = localCodexDefaults.providerId || "local-codex-config";
     const wireApi = localCodexDefaults.wireApi || "responses";
+    const replacedManagedProvider = Boolean(envConfigStrings.PAPERCLIP_CODEX_PROVIDERS);
     envConfigStrings.PAPERCLIP_CODEX_PROVIDERS = JSON.stringify({
       providers: {
         [providerId]: {
@@ -773,7 +781,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     });
     await onLog(
       "stdout",
-      `[paperclip] Reusing host Codex provider "${providerId}" (${localCodexDefaults.baseUrl}) from ${localCodexDefaults.configPath}.\n`,
+      `[paperclip] Reusing host Codex provider "${providerId}" (${localCodexDefaults.baseUrl}) from ${localCodexDefaults.configPath}` +
+        (replacedManagedProvider ? " — local-first overrode the managed AI connection.\n" : ".\n"),
     );
   }
   const preparedRuntimeConfig = await prepareCodexRuntimeConfig({
