@@ -1,0 +1,19 @@
+server/src/modules/agent-lifecycle/adapters/records.ts
+  s_d81f87704807af::t_c8a8830c36b1fb 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "a23427882d666ccb09e4c9b54058fcb6764bc0b3",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
