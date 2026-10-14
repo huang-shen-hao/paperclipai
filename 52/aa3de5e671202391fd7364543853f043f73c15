@@ -1,0 +1,21 @@
+server/src/services/external-conversation-adapter.test.ts
+  s_d81f87704807af::t_52d21e272c6d09 1-95
+server/src/services/conversation-continuation.ts
+  s_d81f87704807af::t_ab53954afd1e3d 9-26,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "52aa3de5e671202391fd7364543853f043f73c15",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
