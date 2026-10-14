@@ -1,0 +1,22 @@
+server/src/modules/agent-lifecycle/__tests__/lifecycle.test.ts
+  s_d81f87704807af::t_41ea0a76a9674a 361-362,364-365
+  s_d81f87704807af::t_297fb108e8ce12 717-719,721-722
+server/src/modules/agent-lifecycle/domain/policy.ts
+  s_d81f87704807af::t_87b772d20b09a8 35-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "25ad20b1839f51f2b82fc451d29a361a2f77a032",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
