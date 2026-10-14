@@ -55,6 +55,7 @@ const mockIssuesApi = vi.hoisted(() => ({
   listAttachments: vi.fn(),
   listWorkProducts: vi.fn(),
   checkMonitorNow: vi.fn(),
+  retryScheduledRetryNow: vi.fn(),
   listFeedbackVotes: vi.fn(),
   listInteractions: vi.fn(),
   getQueuedComments: vi.fn(),
@@ -1478,6 +1479,35 @@ describe("IssueDetail", () => {
       expect(container.textContent).not.toContain("First task monitor failed");
       expect(Array.from(container.querySelectorAll("button")).find((entry) => entry.textContent === "Check now")?.disabled).toBe(false);
     });
+  });
+
+  it("routes the waiting surface to the scheduled retry instead of the monitor", async () => {
+    const scheduledRetry = {
+      runId: "run-retry-1",
+      status: "scheduled_retry" as const,
+      agentId: "agent-1",
+      agentName: "Worker",
+      retryOfRunId: "run-1",
+      scheduledRetryAt: new Date(Date.now() + 60_000).toISOString(),
+      scheduledRetryAttempt: 1,
+      scheduledRetryReason: "transient_failure",
+    };
+    mockIssuesApi.get.mockResolvedValue(createIssue({ status: "in_progress", scheduledRetry }));
+    mockIssuesApi.retryScheduledRetryNow.mockResolvedValue({
+      outcome: "promoted", message: "Retry promoted", scheduledRetry: null,
+    });
+    await act(async () => renderIssueView());
+    let button: HTMLButtonElement | undefined;
+    await waitForAssertion(() => {
+      // The waiting banner and the composer strip share this control.
+      button = Array.from(container.querySelectorAll("button")).find((entry) => entry.textContent === "Check now");
+      expect(button).toBeTruthy();
+    });
+    await act(async () => button!.click());
+    // The waiting surface is shared with monitors, but a retry has no monitor to
+    // check — the monitor route answers 409 "Issue has no scheduled monitor".
+    await waitForAssertion(() => expect(mockIssuesApi.retryScheduledRetryNow).toHaveBeenCalledTimes(1));
+    expect(mockIssuesApi.checkMonitorNow).not.toHaveBeenCalled();
   });
 
   afterEach(async () => {

@@ -237,6 +237,8 @@ import { useIssueExternalObjects } from "../hooks/useIssueExternalObjects";
 import { IssueGalleryContext } from "../context/IssueGalleryContext";
 import { useIssuePlanDocument } from "../hooks/useIssuePlanDocument";
 import { useTaskArtifactArrival } from "../hooks/useTaskArtifactArrival";
+import { useRetryNowMutation } from "../hooks/useRetryNowMutation";
+import { deriveMonitorState } from "../lib/issue-monitor";
 import { IssueRunLedger } from "../components/IssueRunLedger";
 import { IssueWorkspaceCard } from "../components/IssueWorkspaceCard";
 import type { MentionOption } from "../components/MarkdownEditor";
@@ -4630,6 +4632,21 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
     },
   });
 
+  // A waiting surface covers two different wakes: a real monitor check, and a
+  // scheduled retry. Only the first has a monitor to trigger, so the shared
+  // "Check now" control has to follow the surface's own source — posting the
+  // monitor route for a retry answers 409 "Issue has no scheduled monitor".
+  const retryScheduledNow = useRetryNowMutation(issueId);
+  const checkNowTargetsScheduledRetry = issue ? deriveMonitorState(issue).source === "scheduled-retry" : false;
+  const checkNowPending = checkNowTargetsScheduledRetry ? retryScheduledNow.isPending : checkIssueMonitorNow.isPending;
+  const checkNowError = checkNowTargetsScheduledRetry
+    ? retryScheduledNow.lastError?.message ?? null
+    : checkIssueMonitorNow.error?.message;
+  const checkNow = () => {
+    if (checkNowTargetsScheduledRetry) retryScheduledNow.mutate();
+    else checkIssueMonitorNow.mutate();
+  };
+
   const approvalDecision = useMutation({
     mutationFn: async ({
       approvalId,
@@ -7539,9 +7556,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
         onCancelMonitor={() => cancelIssueMonitor.mutateAsync()}
         issue={issue}
         workProducts={workProducts}
-        checkError={checkIssueMonitorNow.error?.message}
-        onCheckNow={() => checkIssueMonitorNow.mutate()}
-        checkingNow={checkIssueMonitorNow.isPending}
+        checkError={checkNowError}
+        onCheckNow={checkNow}
+        checkingNow={checkNowPending}
       />
 
       {taskChatShellEnabled ? null : (
@@ -8107,9 +8124,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                       <IssueMonitorComposerStrip
                         issue={issue}
                         workProducts={workProducts}
-                        checkError={checkIssueMonitorNow.error?.message}
-                        onCheckNow={() => checkIssueMonitorNow.mutate()}
-                        checkingNow={checkIssueMonitorNow.isPending}
+                        checkError={checkNowError}
+                        onCheckNow={checkNow}
+                        checkingNow={checkNowPending}
                       />
                     ) : null
                   }

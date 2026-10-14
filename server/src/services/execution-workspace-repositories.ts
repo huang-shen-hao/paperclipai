@@ -57,6 +57,39 @@ export function assertRepositoryRetryMatches(row: Pick<RepositoryRow, "repositor
   }
 }
 
+/**
+ * Workspaces whose every backing task is gone.
+ *
+ * `executionWorkspaceReadSqlCondition` holds a workspace closed for **every**
+ * actor while any entry in `metadata._issuePrivacySources` (or its
+ * `sourceIssueId`) names an issue that no longer exists — the provenance cannot
+ * be re-verified, so it fails closed. Deleting a task does not clear that
+ * pointer, so the workspace it leaves behind becomes permanently unreadable.
+ *
+ * Such a workspace is dead weight, but it is still an `execution_workspaces`
+ * row whose `cwd` sits on a shared root, which made it a *source* of that root
+ * for every later admission. Because admission requires each reader to reach
+ * every source, one deleted task could permanently fail every new task on the
+ * same shared root with "Task workspace access is no longer available".
+ *
+ * A workspace with no live referencing issue and no live privacy source can
+ * never be authorized again, so it is excluded from root provenance instead of
+ * blocking live work.
+ */
+async function orphanedWorkspaceIds(tx: Db | DbTransaction, companyId: string): Promise<Set<string>> {
+  const rows = await tx.select({ id: executionWorkspaces.id }).from(executionWorkspaces).where(and(
+    eq(executionWorkspaces.companyId, companyId),
+    sql`not exists (select 1 from ${issues} backing
+      where backing.company_id = ${executionWorkspaces.companyId}
+        and (backing.execution_workspace_id = ${executionWorkspaces.id}
+          or backing.id = ${executionWorkspaces.sourceIssueId}))`,
+    sql`not exists (select 1 from jsonb_object_keys(coalesce(${executionWorkspaces.metadata}->'_issuePrivacySources', '{}'::jsonb)) source(id)
+      join ${issues} privacy on privacy.id::text = source.id
+        and privacy.company_id = ${executionWorkspaces.companyId})`,
+  ));
+  return new Set(rows.map(row => row.id));
+}
+
 async function resolveRepositoryRootSources(tx: Db | DbTransaction, input: {
   companyId: string; cwd: string; sourceWorkspaceId?: string; inspectCurrentAliases?: boolean; preparingCopyProjectIds?: Set<string>;
 }) {
@@ -66,6 +99,10 @@ async function resolveRepositoryRootSources(tx: Db | DbTransaction, input: {
     .where(eq(executionWorkspaceRepositoryAccess.companyId, input.companyId));
   const entries = companyEntries.filter(entry => entry.rootKey === rootKey);
   const overlappingEntries = companyEntries.filter(entry => repositoryRootsOverlap(entry.canonicalCwd, canonicalCwd));
+  // Computed once and applied to every way a workspace can enter the source
+  // sets below: a retained `source` row, a peer workspace sharing the cwd, or a
+  // repository inventory row pointing at one.
+  const orphaned = await orphanedWorkspaceIds(tx, input.companyId);
   if (entries.some(entry => entry.canonicalCwd !== canonicalCwd)
     || overlappingEntries.some(entry => createHash("sha256").update(entry.canonicalCwd).digest("hex") !== entry.rootKey)) {
     throw forbidden("Repository root identity conflicts with its retained access record");
@@ -164,6 +201,9 @@ async function resolveRepositoryRootSources(tx: Db | DbTransaction, input: {
   }
   for (const entry of overlappingEntries) if (entry.kind === "project_source" && !isolatedProjectIds.has(entry.scopeId)) {
     sharedProjectIds.add(entry.scopeId);
+  }
+  for (const id of orphaned) {
+    sourceIds.delete(id); sharedSourceIds.delete(id); isolatedSourceIds.delete(id); sharedSourceRoots.delete(id);
   }
   return { canonicalCwd, rootKey, entries, overlappingEntries, sourceIds, sharedSourceIds, isolatedSourceIds, sourceProjectIds, sharedProjectIds, isolatedProjectIds };
 }

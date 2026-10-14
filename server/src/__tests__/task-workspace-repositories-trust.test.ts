@@ -870,4 +870,20 @@ const support = await getEmbeddedPostgresTestSupport();
     await expect(f.service.prepareForAdmission(f.admission)).resolves.toEqual([]);
     expect((await readersOf()).map(reader => reader.scopeId)).toEqual([f.runId]);
   });
+
+  it("ignores a shared-root peer workspace left behind by a deleted task", async () => {
+    const f = await fixture(), peer = await standardPeer(f);
+    // Deleting a task deliberately keeps its workspace `_issuePrivacySources`
+    // naming the deleted issue — a previous task may have left files behind,
+    // and losing that link must not publish them. The workspace read condition
+    // then fails closed for every actor, so nothing can read it again. It still
+    // shares this root though, which used to make it a *source* of the root and
+    // fail every later admission with "Task workspace access is no longer
+    // available".
+    await db.delete(issues).where(eq(issues.id, peer.issueId));
+    const [abandoned] = await db.select().from(executionWorkspaces)
+      .where(eq(executionWorkspaces.id, peer.workspace.id));
+    expect(Object.keys(abandoned.metadata?._issuePrivacySources ?? {})).toContain(peer.issueId);
+    await expect(f.service.prepareForAdmission(f.admission)).resolves.toEqual([]);
+  });
 });
