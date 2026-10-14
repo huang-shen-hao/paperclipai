@@ -453,8 +453,15 @@ export async function execute(
   const prompt = buildPrompt(ctx, promptConfig, { resumedSession: Boolean(sessionId) });
 
   // ── Build command args ─────────────────────────────────────────────────
-  // Use -Q (quiet) to get clean output: just response + session_id line
-  const useQuiet = cfgBoolean(config.quiet) === true; // default false
+  // `-q` is the one-shot query; `-Q` is quiet mode, and quiet is the default.
+  // Without it Hermes keeps its interactive rendering on stdout: it echoes the
+  // whole prompt as `Query: …` and prints a `┊ 📚 preparing skill_view…` line
+  // for every tool it is about to run. Paperclip streams stdout into the task
+  // transcript, so those lines surfaced as the agent's own message and as fake
+  // tool calls. Under -Q stdout carries only the final response; the session id
+  // moves to stderr and is still recovered from the combined stream below.
+  // Operators can opt back in with `quiet: false` for debugging.
+  const useQuiet = cfgBoolean(config.quiet) !== false;
   const args: string[] = ["chat", "-q", prompt];
   if (useQuiet) args.push("-Q");
 

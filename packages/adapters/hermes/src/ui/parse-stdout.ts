@@ -167,6 +167,56 @@ function syntheticToolUseId(): string {
   return `hermes-tool-${++toolCallCounter}`;
 }
 
+// ── Prompt echo suppression ────────────────────────────────────────────────
+
+/**
+ * A non-quiet run makes Hermes echo the entire prompt as `Query: <prompt>`
+ * before it starts working. That echo spans many lines, so track it across
+ * calls and drop it until Hermes' own runtime output resumes.
+ *
+ * Bounded on purpose: if the CLI's rendering changes and the end marker never
+ * arrives, we stop hiding output instead of swallowing the rest of the run.
+ */
+const MAX_ECHO_LINES = 500;
+let queryEchoLinesRemaining = 0;
+
+/** Hermes prints this immediately after the echoed prompt. */
+function isQueryEchoLine(stripped: string): boolean {
+  return stripped.startsWith("Query:");
+}
+
+/** First line that can no longer be part of the echoed prompt. */
+function endsQueryEcho(stripped: string): boolean {
+  return stripped.startsWith("Initializing agent")
+    || stripped.startsWith("[hermes]")
+    || stripped.startsWith("[paperclip]")
+    || stripped.startsWith("[tool]")
+    || stripped.startsWith("┊")
+    || stripped.startsWith("session_id:")
+    || stripped.startsWith("Warning:")
+    || /^\[\d{4}-\d{2}-\d{2}T/.test(stripped);
+}
+
+/**
+ * Tool *progress* notifications look like `┊ 📚 preparing skill_view…`: they
+ * announce a tool that is about to run, and the paired call/result arrives
+ * later on the completion line. Rendering them produced dozens of identical
+ * `preparing` activities per run, so they are never emitted. Completion lines
+ * always carry a duration, which is what separates the two.
+ */
+function isToolProgressLine(stripped: string): boolean {
+  if (!/\bpreparing\b/.test(stripped)) return false;
+  return !/[\d.]+s\s*(?:\([\d.]+s\))?\s*$/u.test(stripped);
+}
+
+/**
+ * Hermes' own status lines around the start of a turn. They carry no agent
+ * output and are absent entirely under -Q, so keep them out of the transcript.
+ */
+function isRuntimeStatusLine(stripped: string): boolean {
+  return stripped.startsWith("Initializing agent") || /^[─—–-]{3,}$/u.test(stripped);
+}
+
 // ── Thinking detection ─────────────────────────────────────────────────────
 
 function isThinkingLine(line: string): boolean {
@@ -196,6 +246,20 @@ export function parseHermesStdoutLine(
 ): TranscriptEntry[] {
   const trimmed = stripAnsi(line).trim();
   if (!trimmed) return [];
+
+  // ── Echoed prompt (non-quiet runs) ─────────────────────────────────────
+  if (queryEchoLinesRemaining > 0) {
+    if (!endsQueryEcho(trimmed)) {
+      queryEchoLinesRemaining -= 1;
+      return [];
+    }
+    queryEchoLinesRemaining = 0;
+  } else if (isQueryEchoLine(trimmed)) {
+    queryEchoLinesRemaining = MAX_ECHO_LINES;
+    return [];
+  }
+
+  if (isRuntimeStatusLine(trimmed)) return [];
 
   // ── System/adapter messages ────────────────────────────────────────────
   if (trimmed.startsWith("[hermes]") || trimmed.startsWith("[paperclip]")) {
@@ -232,6 +296,11 @@ export function parseHermesStdoutLine(
     // Assistant message: ┊ 💬 {text}
     if (isAssistantToolLine(trimmed)) {
       return [{ kind: "assistant", ts, text: extractAssistantText(trimmed) }];
+    }
+
+    // Progress notification for a tool that has not finished yet.
+    if (isToolProgressLine(trimmed)) {
+      return [];
     }
 
     // Tool completion: ┊ {emoji} {verb} {detail} {duration}

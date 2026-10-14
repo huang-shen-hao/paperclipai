@@ -125,6 +125,43 @@ describe("hermes-local adapter onSpawn forwarding", () => {
     expect(vi.mocked(serverUtils.runChildProcess).mock.calls.at(-1)![3].cwd).toBe("/private/qa/configured-workspace");
   });
 
+  /**
+   * Without -Q, Hermes renders its interactive session to stdout: the whole
+   * prompt echoed as `Query: …` plus a `┊ … preparing <tool>…` line per tool.
+   * Paperclip streams that stdout into the task transcript, so the agent
+   * appeared to say its own instructions. Quiet mode is the default; the
+   * session id moves to stderr and is still recovered.
+   */
+  it("runs Hermes quiet by default so stdout carries only the response", async () => {
+    vi.mocked(serverUtils.runChildProcess).mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      stdout: "可用\n",
+      stderr: "session_id: 20261014_160348_bf8281\n",
+      pid: null,
+      startedAt: null,
+    });
+
+    const { ctx } = makeCtx();
+    const result = await execute(ctx as any);
+
+    const args = vi.mocked(serverUtils.runChildProcess).mock.calls.at(-1)![2] as string[];
+    expect(args).toContain("-Q");
+    expect(result.resultJson).toMatchObject({
+      result: "可用",
+      session_id: "20261014_160348_bf8281",
+    });
+    expect(result.sessionParams).toEqual({ sessionId: "20261014_160348_bf8281" });
+  });
+
+  it("lets an operator opt back into the interactive rendering", async () => {
+    const { ctx } = makeCtx({ quiet: false });
+    await execute(ctx as any);
+    const args = vi.mocked(serverUtils.runChildProcess).mock.calls.at(-1)![2] as string[];
+    expect(args).not.toContain("-Q");
+  });
+
   it("runChildProcess opts type includes onSpawn", () => {
     // Type-level assertion: if onSpawn were removed from the type,
     // this file would fail to compile. The runtime test above catches
