@@ -1,0 +1,58 @@
+packages/plugins/plugin-local-sessions/src/worker.ts
+  s_d81f87704807af::t_ea2cb95a1f53a9 1-21,23-59,61-104,123-168
+  s_d81f87704807af::t_daa48dcc8e0d00 22,60
+  s_d81f87704807af::t_ed6e4378ce4e6d 105-122
+packages/plugins/plugin-local-sessions/scripts/build-ui.mjs
+  s_d81f87704807af::t_42f2898a0ce8fa 1-24
+packages/plugins/plugin-local-sessions/src/manifest.ts
+  s_d81f87704807af::t_42f2898a0ce8fa 1-84
+packages/plugins/plugin-local-sessions/README.md
+  s_d81f87704807af::t_c32179159c115f 1-75
+packages/plugins/plugin-local-sessions/src/providers/types.ts
+  s_d81f87704807af::t_8f96ac65f66dff 1-75
+packages/plugins/plugin-local-sessions/package.json
+  s_d81f87704807af::t_42f2898a0ce8fa 1-39
+packages/plugins/plugin-local-sessions/src/providers/jsonl.ts
+  s_d81f87704807af::t_8f96ac65f66dff 1-102
+packages/plugins/plugin-local-sessions/src/providers/index.ts
+  s_d81f87704807af::t_53cb129eab3ddf 1-22
+packages/plugins/plugin-local-sessions/tsconfig.json
+  s_d81f87704807af::t_42f2898a0ce8fa 1-10
+packages/plugins/plugin-local-sessions/src/index.ts
+  s_d81f87704807af::t_42f2898a0ce8fa 1-2
+packages/plugins/plugin-local-sessions/src/providers/claude-style.ts
+  s_d81f87704807af::t_1a3eb89b7b1025 1-209
+packages/plugins/plugin-local-sessions/src/providers/qoder.ts
+  s_d81f87704807af::t_92fa782db61ff2 3-8,11,13-14
+  s_d81f87704807af::t_1a3eb89b7b1025 1-2,9-10,12,15-17
+packages/plugins/plugin-local-sessions/src/providers/hermes.ts
+  s_d81f87704807af::t_53cb129eab3ddf 1-125
+packages/plugins/plugin-local-sessions/src/ui/index.tsx
+  s_d81f87704807af::t_5d4c4645c09f59 278,282,286,290,295
+  s_d81f87704807af::t_fb2f622d9ef119 4,12-17,80-151,181,206-207,209,212,216,220,223-224,228,241-245,247,262,265,268-270,272,276-277,279,281,283,285,289,294,296,301,303,308,313,318,365-367,369,376-378,384,390-391,394,401,406-407,412,417,419-422,424,426,438,447,456,465-466,468,483
+  s_d81f87704807af::t_52f92c76e4bdf1 455
+  s_d81f87704807af::t_8010323d139370 3,257-258,332-333,346-350,352-353,458,460
+  s_d81f87704807af::t_94d6492eeda1a6 1-2,5-11,18-79,152-180,182-205,208,210-211,213-215,217-219,221-222,225-227,229-240,246,248-256,259-261,263-264,266-267,271,273-275,280,284,287-288,291-293,297-300,302,304-307,309-312,314-317,319-331,334-345,351,354-364,368,370-375,379-383,385-389,392-393,395-400,402-405,408-411,413-416,418,423,425,427-437,439-446,448-454,457,459,461-464,467,469-482,484-486
+packages/plugins/plugin-local-sessions/src/providers/codex.ts
+  s_d81f87704807af::t_6958cf13132723 1-201
+packages/plugins/plugin-local-sessions/src/providers/claude.ts
+  s_d81f87704807af::t_1a3eb89b7b1025 1-12
+packages/plugins/plugin-local-sessions/src/providers/origin.ts
+  s_d81f87704807af::t_92fa782db61ff2 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "965788e6086121fa8420da0c035d369359102e37",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
