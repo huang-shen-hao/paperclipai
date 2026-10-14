@@ -1,0 +1,23 @@
+server/src/services/agent-deletion.ts
+  s_d81f87704807af::t_fb35c1f57309f0 43
+  s_d81f87704807af::t_a116546f16dbfd 58-63
+  s_d81f87704807af::t_0d61f09301acbe 3-6,34-42,44-57,68-72
+server/src/modules/agent-lifecycle/index.ts
+  s_d81f87704807af::t_5be46e3603c4cc 20-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "9755301f06f0840fcb6e6260ffe686d8cf532773",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
