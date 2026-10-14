@@ -1,0 +1,28 @@
+server/src/modules/agent-lifecycle/domain/policy.ts
+  s_d81f87704807af::t_0bd7cbff453b85 65-76
+server/src/services/agents.ts
+  s_d81f87704807af::t_0bd7cbff453b85 281-282
+server/src/routes/agents.ts
+  s_d81f87704807af::t_727a6088c028fa 5592-5595
+server/src/modules/agent-lifecycle/adapters/deletion.ts
+  s_d81f87704807af::t_0bd7cbff453b85 9-14,25,28-29,31
+  s_d81f87704807af::t_e6a36eaee99bbc 27
+server/src/modules/agent-lifecycle/index.ts
+  s_d81f87704807af::t_0bd7cbff453b85 109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "08b7f196e94c735bc42ffc8d0db0eadd6cb9a0cc",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
