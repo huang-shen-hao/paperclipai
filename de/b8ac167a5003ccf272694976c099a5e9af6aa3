@@ -1,0 +1,19 @@
+packages/adapters/codex-local/src/server/test.ts
+  s_d81f87704807af::t_661234193d776e 481-491,501,527-529
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "deb8ac167a5003ccf272694976c099a5e9af6aa3",
+  "prompts": {},
+  "sessions": {
+    "s_d81f87704807af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a134c0-a8b7-7882-a3ca-05e6689b7f36",
+        "model": "deepseek-v4-flash"
+      },
+      "human_author": "tuandui <tuandui@tsign.cn>"
+    }
+  }
+}
