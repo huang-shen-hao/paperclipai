@@ -6,9 +6,27 @@ import { hasRemoteTerminationReceipt } from "./remote-execution-termination.js";
 
 // These adapters accept a conversation turn. Retrying a process or webhook can
 // replay the action itself, so those adapters retain their recovery contract.
+/**
+ * Adapters that execute a task as a resumable conversation, so a stopped run
+ * can be continued by a later user turn instead of being held as an
+ * unreplayable side effect.
+ *
+ * `qwenwork` is an external adapter plugin (QwenWork / `qoderclicn`) rather
+ * than a first-party built-in, but it keeps a named, resumable session like the
+ * bundled CLI adapters do, and the recovery predicates below match on the
+ * adapter type *persisted onto the run*, not on where the adapter came from.
+ * Leaving it out made every interrupted QwenWork run a permanent hold: the
+ * conversation-recovery predicate could never match, so nothing could retire
+ * the "preserve without replay" blocker and no later message could be promoted
+ * into a successor run.
+ *
+ * Third-party adapters therefore still need an entry here. A capability-driven
+ * opt-in is the better long-term shape, but these predicates are compiled into
+ * SQL, so the list has to stay statically expressible for now.
+ */
 export const CONVERSATION_ADAPTER_TYPES = [
   "claude_local", "codex_local", "cursor", "gemini_local", "opencode_local",
-  "pi_local", "grok_local", "kimi_local", "hermes_local",
+  "pi_local", "grok_local", "kimi_local", "hermes_local", "qwenwork",
 ] as const;
 
 export function isConversationAdapter(adapterType: string): boolean {
