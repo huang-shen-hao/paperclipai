@@ -4,6 +4,33 @@ import { and, eq, sql } from "drizzle-orm";
 import { agents, agentApiKeys, type Db } from "@paperclipai/db";
 import { conflict, notFound } from "../../../errors.js";
 import { agentRecordQueries, type CreateAgentOptions, type CreateAgentData } from "../../../lib/agent-records.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../../home-paths.js";
+
+/**
+ * Defaults every new codex_local agent needs to be usable.
+ *
+ * The verification probe runs the Codex CLI in the agent's working directory, so
+ * an agent created without one never gets past `verifying`; and without
+ * `codexLocalFirst` its runs ignore the machine's own Codex config (model, relay,
+ * credential) even though that is what an operator means by "use my Codex".
+ * Both keys stay per-agent overridable afterwards.
+ */
+function applyLocalCodexCreationDefaults(data: CreateAgentData, agentId: string): CreateAgentData {
+  if (data.adapterType !== "codex_local") return data;
+  const config = data.adapterConfig && typeof data.adapterConfig === "object" && !Array.isArray(data.adapterConfig)
+    ? { ...(data.adapterConfig as Record<string, unknown>) }
+    : {};
+  let changed = false;
+  if (config.codexLocalFirst === undefined) {
+    config.codexLocalFirst = true;
+    changed = true;
+  }
+  if (typeof config.cwd !== "string" || config.cwd.trim().length === 0) {
+    config.cwd = resolveDefaultAgentWorkspaceDir(agentId);
+    changed = true;
+  }
+  return changed ? { ...data, adapterConfig: config } : data;
+}
 
 export function agentRecords(db: Db, effects: LifecycleEffects) {
   const { getById } = agentRecordQueries(db);
@@ -14,10 +41,13 @@ export function agentRecords(db: Db, effects: LifecycleEffects) {
       if (Object.keys(data).some(key => key.startsWith("lifecycle"))) throw conflict("Lifecycle fields belong to the lifecycle module");
       return effects.transaction(db, companyId, async (txDb) => {
         const tx = txDb;
-        const prepared = await effects.prepareHire(txDb, companyId, data, options);
+        const hired = await effects.prepareHire(txDb, companyId, data, options);
+        const agentId = typeof hired.id === "string" && hired.id.length > 0 ? hired.id : randomUUID();
+        const prepared = applyLocalCodexCreationDefaults(hired, agentId);
         const created = await tx
           .insert(agents)
           .values({
+            id: agentId,
             ...prepared,
             lifecycleState: data.status === "pending_approval" ? "pending_approval" : data.status === "terminated" ? "terminated" : data.status === "paused" ? "paused" : "preparing",
             lifecycleVersion: 1,

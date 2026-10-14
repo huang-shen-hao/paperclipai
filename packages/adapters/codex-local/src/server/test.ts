@@ -24,6 +24,7 @@ import { parseCodexJsonl } from "./parse.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
 import { codexHomeDir, readCodexAuthInfo } from "./quota.js";
 import { buildCodexExecArgs } from "./codex-args.js";
+import { readLocalCodexDefaults } from "./local-codex-defaults.js";
 import {
   isManagedCodexHomePath,
   prepareManagedCodexHome,
@@ -87,6 +88,12 @@ async function prepareCodexHelloProbe(input: {
   env: Record<string, string>;
   probeApiKey: string | null;
   managedAiConnection?: boolean;
+  /**
+   * Host Codex config (relay base URL + bearer token) for a local-first agent.
+   * Without it the probe has no credential at all when the agent relies on the
+   * machine's own `~/.codex/config.toml`, and verification could never pass.
+   */
+  localFirstProvider?: { baseUrl: string; wireApi: string; bearerToken: string } | null;
 }): Promise<{
   command: string;
   args: string[];
@@ -223,11 +230,29 @@ async function prepareCodexHelloProbe(input: {
       : path.join(os.tmpdir(), `paperclip-codex-probe-${input.runId}`);
     // The local finally path retries cleanup independently of the model result.
     if (!input.targetIsRemote) probeHomeLocalDir = probeHome;
+    // A local-first agent authorizes against the machine's own relay, so the
+    // probe home needs the same provider declaration a real run gets. Without
+    // this the auth.json key would be offered to Codex's default provider.
+    const localFirstConfigToml = input.localFirstProvider
+      ? [
+        `model_provider = "paperclip-local"`,
+        `[model_providers.paperclip-local]`,
+        `name = "Paperclip local Codex config"`,
+        `base_url = ${JSON.stringify(input.localFirstProvider.baseUrl)}`,
+        `wire_api = ${JSON.stringify(input.localFirstProvider.wireApi || "responses")}`,
+        `requires_openai_auth = false`,
+        // Mirror how a hand-written host config carries the relay token: an
+        // `env_key` would make Codex look for an environment variable the probe
+        // deliberately does not set.
+        `experimental_bearer_token = ${JSON.stringify(input.localFirstProvider.bearerToken)}`,
+        "",
+      ].join("\n")
+      : null;
     return {
       command: "sh",
       args: [
         "-c",
-        `set -e; umask 077; mkdir -p "$CODEX_HOME"; printf "%s" "$_PAPERCLIP_CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"; unset _PAPERCLIP_CODEX_AUTH_JSON; cleanup() { result=$?; trap - EXIT; rm -f "$CODEX_HOME/auth.json" || true; rm -rf "$CODEX_HOME" || printf '%s\\n' '${PROBE_CLEANUP_WARNING}' >&2; exit "$result"; }; trap cleanup EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; "$0" "$@"`,
+        `set -e; umask 077; mkdir -p "$CODEX_HOME"; printf "%s" "$_PAPERCLIP_CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"; unset _PAPERCLIP_CODEX_AUTH_JSON; if [ -n "$_PAPERCLIP_CODEX_PROBE_CONFIG" ]; then printf "%s" "$_PAPERCLIP_CODEX_PROBE_CONFIG" > "$CODEX_HOME/config.toml"; unset _PAPERCLIP_CODEX_PROBE_CONFIG; fi; cleanup() { result=$?; trap - EXIT; rm -f "$CODEX_HOME/auth.json" || true; rm -rf "$CODEX_HOME" || printf '%s\\n' '${PROBE_CLEANUP_WARNING}' >&2; exit "$result"; }; trap cleanup EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; "$0" "$@"`,
         input.command,
         ...input.args,
       ],
@@ -235,6 +260,7 @@ async function prepareCodexHelloProbe(input: {
         ...input.env,
         CODEX_HOME: probeHome,
         _PAPERCLIP_CODEX_AUTH_JSON: JSON.stringify({ OPENAI_API_KEY: input.probeApiKey }),
+        ...(localFirstConfigToml ? { _PAPERCLIP_CODEX_PROBE_CONFIG: localFirstConfigToml } : {}),
       },
       cleanup,
     };
@@ -461,11 +487,27 @@ export async function testEnvironment(
       // the command line) to avoid leaking it into process listings.
       // Managed connections already contain their exact auth and provider config.
       // Replacing that home with a native-key probe would test another provider.
+      // A local-first agent reads the machine's own Codex config (model, relay,
+      // credential). Mirror that here so the probe authenticates the same way a
+      // real run does instead of reporting a credential it does not have.
+      const codexLocalFirst =
+        (config as Record<string, unknown>).codexLocalFirst === true ||
+        (process.env.PAPERCLIP_CODEX_LOCAL_FIRST ?? "").trim() === "1";
+      const localCodexDefaults = !config.managedAiConnection && codexLocalFirst
+        ? readLocalCodexDefaults()
+        : null;
+      const localFirstProvider = localCodexDefaults?.baseUrl && localCodexDefaults.bearerToken
+        ? {
+          baseUrl: localCodexDefaults.baseUrl,
+          wireApi: localCodexDefaults.wireApi || "responses",
+          bearerToken: localCodexDefaults.bearerToken,
+        }
+        : null;
       const probeApiKey = config.managedAiConnection ? null : isNonEmpty(configOpenAiKey)
         ? configOpenAiKey
         : isNonEmpty(hostOpenAiKey)
           ? hostOpenAiKey
-          : null;
+          : localFirstProvider?.bearerToken ?? null;
       const preparedProbe = await prepareCodexHelloProbe({
         managedAiConnection: Boolean(config.managedAiConnection),
         runId,
@@ -477,6 +519,7 @@ export async function testEnvironment(
         args,
         env,
         probeApiKey,
+        localFirstProvider,
       });
       // The hello probe budget used to be a hard-coded 45s. On networks where
       // Codex's own startup work is slow (plugin-catalog fetches to
